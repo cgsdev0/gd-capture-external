@@ -1,9 +1,6 @@
-cmake_minimum_required(VERSION 3.13)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-add_subdirectory(godot-cpp)
-
+cmake_minimum_required(VERSION 3.21)
 project(gd-capture-external)
-
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(TARGET_ALIAS "template_debug")
+add_subdirectory(godot-cpp)
 add_subdirectory(source)
