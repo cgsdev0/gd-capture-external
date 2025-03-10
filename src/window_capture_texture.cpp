@@ -35,14 +35,14 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
     auto frameContentSize = frame.ContentSize();
     auto frameSurface = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
 
-    D3D11_TEXTURE2D_DESC desc;
-    frameSurface->GetDesc(&desc);
-    auto res = static_cast<ID3D11Resource *>(frameSurface.get());
+    // D3D11_TEXTURE2D_DESC desc;
+    // frameSurface->GetDesc(&desc);
+
     auto interop = D3D11DeviceSingleton::get_instance().get_device11on12();
     auto d3d12Device = D3D11DeviceSingleton::get_instance().get_device12();
     auto command_queue = D3D11DeviceSingleton::get_instance().get_command_queue();
 
-    ID3D12Resource *capture_d3d12_resource;
+    winrt::com_ptr<ID3D12Resource> capture_d3d12_resource;
     interop->CreateWrappedResource(
         frameSurface.get(),
         nullptr,
@@ -64,7 +64,7 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
     commandList->ResourceBarrier(1, &barrier_to_copy_dest);
 
     // Perform the copy from D3D11 texture to D3D12 texture
-    commandList->CopyResource(godot_internal_tex, capture_d3d12_resource);
+    commandList->CopyResource(godot_internal_tex, capture_d3d12_resource.get());
 
     D3D12_RESOURCE_BARRIER barrier_back_to_shader = {};
     barrier_back_to_shader.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
