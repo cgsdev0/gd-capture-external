@@ -1,3 +1,4 @@
+.vscode/
 .sconsign.dblite
 bin/
 *.obj
