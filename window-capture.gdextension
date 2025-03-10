@@ -1,0 +1,13 @@
+[configuration]
+entry_symbol = "godot_window_capture_init"
+compatibility_minimum = 4.1
+
+[libraries]
+windows.debug.x86_64 = "res://addons/window-capture/libgodot-window-capture.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/window-capture/libgodot-window-capture.windows.template_release.x86_64.dll"
+
+[dependencies]
+windows.debug.x86_64 = {
+}
+windows.release.x86_64 = {
+}
