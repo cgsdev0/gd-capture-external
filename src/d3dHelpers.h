@@ -152,7 +152,16 @@ CreateDXGISwapChain(
 }
 
 #include <d3d11.h>
+#include <d3d12.h>
+#include <d3d11on12.h>
 #include <memory>
+#include <godot_cpp/classes/rendering_device.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
+
+struct CommandQueueInfo
+{
+    winrt::com_ptr<ID3D12CommandQueue> d3d_queue;
+};
 
 class D3D11DeviceSingleton
 {
@@ -163,20 +172,53 @@ public:
         return instance;
     }
 
+    ID3D12CommandQueue *get_command_queue()
+    {
+        initialize();
+        return command_queue;
+    }
+
     ID3D11Device *get_device()
     {
         initialize();
-        return device.get();
+        return d3d11Device.get();
+    }
+
+    ID3D12Device *get_device12()
+    {
+        initialize();
+        return d3d12Device;
+    }
+
+    ID3D11On12Device *get_device11on12()
+    {
+        initialize();
+        return d3d11on12Device;
     }
 
     void initialize()
     {
-        if (device)
+        if (d3d11Device)
         {
             return; // Already initialized
         }
 
-        device = CreateD3DDevice();
+        auto rd = godot::RenderingServer::get_singleton()->get_rendering_device();
+        this->d3d12Device = reinterpret_cast<ID3D12Device *>(rd->get_driver_resource(godot::RenderingDevice::DRIVER_RESOURCE_LOGICAL_DEVICE, godot::RID(), 0));
+
+        auto q = reinterpret_cast<CommandQueueInfo *>(rd->get_driver_resource(godot::RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE, godot::RID(), 0));
+        this->command_queue = q->d3d_queue.get();
+        D3D11On12CreateDevice(
+            d3d12Device,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            nullptr, 0,
+            nullptr, 0,
+            0,
+            d3d11Device.put(),
+            d3d11Context.put(),
+            nullptr);
+
+        d3d11Device->QueryInterface(__uuidof(ID3D11On12Device), (void **)&this->d3d11on12Device);
     }
 
 private:
@@ -189,8 +231,11 @@ private:
     // Prevent copying and assignment
     D3D11DeviceSingleton(const D3D11DeviceSingleton &) = delete;
     D3D11DeviceSingleton &operator=(const D3D11DeviceSingleton &) = delete;
-
-    winrt::com_ptr<ID3D11Device> device; // Using smart pointer to manage the resource
+    ID3D11On12Device *d3d11on12Device = nullptr;
+    ID3D12Device *d3d12Device = nullptr;
+    ID3D12CommandQueue *command_queue = nullptr;
+    winrt::com_ptr<ID3D11Device> d3d11Device;
+    winrt::com_ptr<ID3D11DeviceContext> d3d11Context;
 };
 
 #endif

@@ -25,6 +25,11 @@ namespace godot
         winrt::com_ptr<IDXGISwapChain1> swapChain{nullptr};
         winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool::FrameArrived_revoker arrived{};
         winrt::com_ptr<ID3D11Texture2D> staging_texture{nullptr};
+        ID3D12Resource *tex_handle = nullptr;
+
+        winrt::com_ptr<ID3D12GraphicsCommandList> commandList{nullptr};
+        winrt::com_ptr<ID3D12CommandAllocator> commandAllocator{nullptr};
+
         std::mutex frame_mutex;
         bool frame_ready = false;
 

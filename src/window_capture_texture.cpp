@@ -23,17 +23,6 @@ void godot::WindowCaptureTexture::_bind_methods()
 
 void godot::WindowCaptureTexture::_process(double delta)
 {
-    if (!texture.is_valid() || !frame_ready)
-        return;
-    RenderingServer *rs = RenderingServer::get_singleton();
-    RenderingDevice *rd = rs->get_rendering_device();
-
-    if (rd->texture_is_valid(texture->rid))
-    {
-        std::lock_guard<std::mutex> lock(frame_mutex);
-        rd->texture_update(texture->rid, 0, bytes);
-        this->frame_ready = false;
-    }
 }
 
 void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const &sender, winrt::Windows::Foundation::IInspectable const &)
@@ -48,33 +37,59 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
 
     D3D11_TEXTURE2D_DESC desc;
     frameSurface->GetDesc(&desc);
+    auto res = static_cast<ID3D11Resource *>(frameSurface.get());
+    auto interop = D3D11DeviceSingleton::get_instance().get_device11on12();
+    auto d3d12Device = D3D11DeviceSingleton::get_instance().get_device12();
+    auto command_queue = D3D11DeviceSingleton::get_instance().get_command_queue();
 
-    this->d3dContext->CopyResource(staging_texture.get(), frameSurface.get());
+    ID3D12Resource *capture_d3d12_resource;
+    interop->CreateWrappedResource(
+        frameSurface.get(),
+        nullptr,
+        D3D12_RESOURCE_STATE_COPY_SOURCE,
+        D3D12_RESOURCE_STATE_COPY_SOURCE,
+        IID_PPV_ARGS(&capture_d3d12_resource));
 
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    HRESULT hr = this->d3dContext->Map(staging_texture.get(), 0, D3D11_MAP_READ, 0, &mappedResource);
+    this->commandAllocator->Reset();
+    this->commandList->Reset(this->commandAllocator.get(), nullptr);
+
+    ID3D12Resource *godot_internal_tex = this->tex_handle;
+
+    D3D12_RESOURCE_BARRIER barrier_to_copy_dest = {};
+    barrier_to_copy_dest.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier_to_copy_dest.Transition.pResource = godot_internal_tex;
+    barrier_to_copy_dest.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barrier_to_copy_dest.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier_to_copy_dest.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    commandList->ResourceBarrier(1, &barrier_to_copy_dest);
+
+    // Perform the copy from D3D11 texture to D3D12 texture
+    commandList->CopyResource(godot_internal_tex, capture_d3d12_resource);
+
+    D3D12_RESOURCE_BARRIER barrier_back_to_shader = {};
+    barrier_back_to_shader.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier_back_to_shader.Transition.pResource = godot_internal_tex;
+    barrier_back_to_shader.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier_back_to_shader.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    barrier_back_to_shader.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    commandList->ResourceBarrier(1, &barrier_back_to_shader);
+
+    HRESULT hr = commandList->Close();
     if (FAILED(hr))
     {
-        godot::print_error("Failed to map texture");
-        return;
+        godot::print_error("failed to close ", hr);
     }
 
-    {
-        std::lock_guard<std::mutex> lock(frame_mutex);
-        memcpy(bytes.ptrw(), static_cast<uint8_t *>(mappedResource.pData), 4 * cx * cy);
-        this->frame_ready = true;
-    }
+    // 4. Execute the command list
+    ID3D12CommandList *ppCommandLists[] = {commandList.get()};
+    command_queue->ExecuteCommandLists(1, ppCommandLists);
 }
 
 bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
 {
-    // Start capture using the provided HWND
-    // HWND win_hwnd = reinterpret_cast<HWND>(hwnd);
-
+    // hard-coded for now
     std::string hwnd_str = "68652";
     HWND win_hwnd = reinterpret_cast<HWND>(std::stoul(hwnd_str));
-
-    // Get the RenderingDevice interface
 
     using namespace winrt;
     using namespace Windows;
@@ -88,9 +103,12 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
     try
     {
         auto d3dDevice = D3D11DeviceSingleton::get_instance().get_device();
+        auto d3d12Device = D3D11DeviceSingleton::get_instance().get_device12();
+        auto interop = D3D11DeviceSingleton::get_instance().get_device11on12();
         winrt::com_ptr<ID3D11Device> device;
         device.attach(d3dDevice);
         device->GetImmediateContext(this->d3dContext.put());
+
         auto dxgiDevice = device.as<IDXGIDevice>();
         auto directDevice = CreateDirect3DDevice(dxgiDevice.get());
         this->item = CreateCaptureItemForWindow(win_hwnd);
@@ -100,24 +118,21 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
             return false;
         }
 
-        // Create staging texture
-        D3D11_TEXTURE2D_DESC desc = {};
-        desc.Width = size.Width;
-        desc.Height = size.Height;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_STAGING; // Staging allows CPU access
-        desc.BindFlags = 0;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        desc.MiscFlags = 0;
-
-        HRESULT hr = device->CreateTexture2D(&desc, nullptr, staging_texture.put());
+        HRESULT hr = d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
         if (FAILED(hr))
         {
-            godot::print_error("Failed to create staging texture");
-            return false;
+            godot::print_error("failed to create command allocator");
+        }
+
+        hr = d3d12Device->CreateCommandList(
+            0,
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            commandAllocator.get(),
+            nullptr,
+            IID_PPV_ARGS(&commandList));
+        if (FAILED(hr))
+        {
+            godot::print_error("failed to create command list");
         }
 
         this->swapChain = CreateDXGISwapChain(
@@ -133,8 +148,13 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
             size);
         this->session = this->framePool.CreateCaptureSession(this->item);
         this->session.StartCapture();
+
         create_texture(RenderingDevice::DATA_FORMAT_B8G8R8A8_UNORM, size.Width, size.Height, true);
+        auto rd = godot::RenderingServer::get_singleton()->get_rendering_device();
+        this->tex_handle = reinterpret_cast<ID3D12Resource *>(rd->get_driver_resource(godot::RenderingDevice::DRIVER_RESOURCE_TEXTURE, texture->rid, 0));
+
         this->arrived = this->framePool.FrameArrived(auto_revoke, {this, &godot::WindowCaptureTexture::OnFrameArrived});
+
         godot::print_line("texture initialized ", size.Width, "x", size.Height);
     }
     catch (HRESULT e)
