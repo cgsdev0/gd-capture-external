@@ -22,7 +22,6 @@ namespace godot
         winrt::Windows::Graphics::Capture::GraphicsCaptureItem item{nullptr};
         winrt::Windows::Graphics::Capture::GraphicsCaptureSession session{nullptr};
         winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool framePool{nullptr};
-        winrt::com_ptr<IDXGISwapChain1> swapChain{nullptr};
         winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool::FrameArrived_revoker arrived{};
         winrt::com_ptr<ID3D11Texture2D> staging_texture{nullptr};
         std::mutex frame_mutex;

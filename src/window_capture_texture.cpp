@@ -120,12 +120,6 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
             return false;
         }
 
-        this->swapChain = CreateDXGISwapChain(
-            device,
-            static_cast<uint32_t>(size.Width),
-            static_cast<uint32_t>(size.Height),
-            static_cast<DXGI_FORMAT>(DirectXPixelFormat::B8G8R8A8UIntNormalized),
-            2);
         this->framePool = Direct3D11CaptureFramePool::CreateFreeThreaded(
             directDevice,
             DirectXPixelFormat::B8G8R8A8UIntNormalized,
