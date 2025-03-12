@@ -6,6 +6,7 @@
 
 #include "capture-base.hpp"
 #include "window_capture_texture.h"
+#include "window-poller.h"
 
 void initialize_godot_window_capture_module(godot::ModuleInitializationLevel p_level)
 {
@@ -16,6 +17,7 @@ void initialize_godot_window_capture_module(godot::ModuleInitializationLevel p_l
     godot::ClassDB::register_class<godot::Texture2DRDAutoRelease>();
     godot::ClassDB::register_class<godot::CaptureBase>();
     godot::ClassDB::register_class<godot::WindowCaptureTexture>();
+    godot::ClassDB::register_class<godot::WindowPoller>();
 }
 
 void uninitialize_godot_window_capture_module(godot::ModuleInitializationLevel p_level)

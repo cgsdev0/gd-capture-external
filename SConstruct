@@ -14,13 +14,19 @@ env = SConscript("godot-cpp/SConstruct")
 
 # Add Windows Graphics Capture API dependencies
 env.Append(CPPDEFINES=["NOMINMAX", "WINRT_LEAN_AND_MEAN"])
-env.Append(LIBS=["d3d11", "runtimeobject", "windowsapp"])
+env.Append(LIBS=["d3d11","dwmapi", "user32",  "runtimeobject", "windowsapp"])
 
 # Enable C++17 for WinRT support
 if env["platform"] == "windows":
+
     env.Append(CXXFLAGS=["/std:c++17", "/Zc:twoPhase-", "/await", "/EHsc"])
     # Add options to ignore specific warnings
     env.Append(CXXFLAGS=["/wd4100", "/wd4505", "/wd4834"])
+
+    # debug symbols
+    env.Append(CXXFLAGS=["/Zi", "/FS"])
+    env.Append(CCFLAGS=["/Zi"])  # Applies to both C and C++
+    env.Append(LINKFLAGS=["/DEBUG"])
 
 # Get the source files
 env.Append(CPPPATH=["src/"])
