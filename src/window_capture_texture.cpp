@@ -203,7 +203,7 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
             1,
             size);
         this->session = this->framePool.CreateCaptureSession(this->item);
-        this->session.IsBorderRequired(true);
+        this->session.IsBorderRequired(false);
         this->session.IsCursorCaptureEnabled(should_capture_cursor);
         this->session.StartCapture();
         _cx = size.Width;
