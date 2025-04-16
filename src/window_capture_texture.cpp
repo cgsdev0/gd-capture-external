@@ -79,11 +79,13 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
 {
     if (closed.load() == true)
         return;
-    auto frame = this->framePool.TryGetNextFrame();
-    if (!frame)
-    {
-        return;
+    winrt::Windows::Graphics::Capture::Direct3D11CaptureFrame frame = sender.TryGetNextFrame();
+
+    // drain
+    while (auto next = sender.TryGetNextFrame()) {
+        frame = next;
     }
+
     auto size = frame.ContentSize();
     auto frameSurface = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
     auto newSize = false;
@@ -132,6 +134,7 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
             }
             this->frame_ready = true;
         }
+        d3dContext->Unmap(staging_texture.get(), 0);
     }
     if (newSize)
     {
