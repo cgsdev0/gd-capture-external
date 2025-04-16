@@ -2,3 +2,4 @@
 .sconsign.dblite
 bin/
 *.obj
+vc140.pdb
