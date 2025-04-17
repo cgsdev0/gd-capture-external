@@ -75,6 +75,12 @@ void godot::WindowCaptureTexture::stop_capture()
     }
 }
 
+static bool is_empty(uint8_t * bytes, unsigned int sample) {
+    for(unsigned int i = 3; i < sample; i += 4) {
+        if (bytes[i]) return false;
+    }
+    return true;
+}
 void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const &sender, winrt::Windows::Foundation::IInspectable const &)
 {
     if (closed.load() == true)
@@ -86,7 +92,15 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
         frame = next;
     }
 
+    if(!frame) {
+        return;
+    }
+
     auto size = frame.ContentSize();
+    if (size.Width == 0 || size.Height == 0) {
+        return;
+    }
+
     auto frameSurface = GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
     auto newSize = false;
     if (_cx != size.Width || _cy != size.Height)
@@ -122,12 +136,14 @@ void godot::WindowCaptureTexture::OnFrameArrived(winrt::Windows::Graphics::Captu
         this->_cx = size.Width;
         this->_cy = size.Height;
         // we may drop frames when resizing bigger; oh well
-        if (bytes.size() >= 4 * _cx * _cy)
+        auto src = static_cast<uint8_t *>(mappedResource.pData);
+        auto bsize = 4 * _cx * _cy;
+        auto rowPitch = mappedResource.RowPitch;
+        if (bytes.size() >= bsize && !is_empty(src + (_cy / 2 * rowPitch) + 8, _cx * 4 - 16))
         {
             // memcpy(bytes.ptrw(), static_cast<uint8_t *>(mappedResource.pData), 4 * cx * cy);
-            auto rowPitch = mappedResource.RowPitch;
             auto dst = bytes.ptrw();
-            auto src = static_cast<uint8_t *>(mappedResource.pData);
+            
             for (int y = 0; y < _cy; ++y)
             {
                 memcpy(dst + (y * _cx * 4), src + (y * rowPitch), _cx * 4);
@@ -153,6 +169,7 @@ bool godot::WindowCaptureTexture::start_capture(int64_t hwnd)
 
     // Start capture using the provided HWND
     HWND win_hwnd = reinterpret_cast<HWND>(hwnd);
+    this->target_hwnd = win_hwnd;
 
     // Get the RenderingDevice interface
 

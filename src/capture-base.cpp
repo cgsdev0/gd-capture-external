@@ -74,6 +74,7 @@ void CaptureBase::create_texture(RenderingDevice::DataFormat format, int cx, int
     bytes.resize(cx * cy * 4); // TODO: FIX THE FORMAT DINGUS
     bytes.fill(0);
 
+    godot::UtilityFunctions::print("Resizing to ", cx, "x", cy);
     texture = Ref(memnew(Texture2DRDAutoRelease(format, cx, cy, bytes, invert_rb)));
     emit_signal("texture_changed", texture);
 }
