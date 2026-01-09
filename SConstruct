@@ -12,34 +12,16 @@ env = SConscript("godot-cpp/SConstruct")
 # - CPPDEFINES are for pre-processor defines
 # - LINKFLAGS are for linking flags
 
-# Add Windows Graphics Capture API dependencies
-env.Append(CPPDEFINES=["NOMINMAX", "WINRT_LEAN_AND_MEAN"])
-env.Append(LIBS=["d3d11","dwmapi", "user32",  "runtimeobject", "windowsapp"])
-
-# Enable C++17 for WinRT support
-if env["platform"] == "windows":
-
-    env.Append(CXXFLAGS=["/std:c++17", "/Zc:twoPhase-", "/await", "/EHsc"])
-    # Add options to ignore specific warnings
-    env.Append(CXXFLAGS=["/wd4100", "/wd4505", "/wd4834"])
-
-    # debug symbols
-    env.Append(CXXFLAGS=["/Zi", "/FS"])
-    env.Append(CCFLAGS=["/Zi"])  # Applies to both C and C++
-    env.Append(LINKFLAGS=["/DEBUG"])
 
 # Get the source files
 env.Append(CPPPATH=["src/"])
+env.Append(LIBS=["wayland-client"])
 sources = Glob("src/*.cpp")
 
 # Determine the platform and target
-if env["platform"] == "windows":
-    library = env.SharedLibrary(
-        "bin/libgodot-window-capture{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-        source=sources,
-    )
-else:
-    print("Platform not supported for WindowCaptureTexture: ", env["platform"])
-    library = None
+library = env.SharedLibrary(
+    "bin/libgodot-window-capture{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
 
 Default(library)
