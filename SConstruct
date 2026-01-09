@@ -17,11 +17,12 @@ env = SConscript("godot-cpp/SConstruct")
 env.Append(CPPPATH=["src/"])
 env.Append(LIBS=["wayland-client"])
 sources = Glob("src/*.cpp")
+c_sources   = Glob("src/*.c")
 
 # Determine the platform and target
 library = env.SharedLibrary(
     "bin/libgodot-window-capture{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-    source=sources,
+    source=sources  + c_sources,
 )
 
 Default(library)
