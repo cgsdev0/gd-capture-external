@@ -9,18 +9,8 @@
 #include "ext-image-capture-source-v1-client-protocol.h"
 #include "ext-image-copy-capture-v1-client-protocol.h"
 
-extern "C" {
-#include "sway-ipc-client.h"
-}
-
-#include "sway-structs.h"
-
 #define WL_OUTPUT_VERSION 4
 
-enum event_loop_fd {
-  EVENT_LOOP_WAYLAND,
-  EVENT_LOOP_SWAYIPC,
-};
 static struct wl_display *wl_display;
 static struct ext_foreign_toplevel_image_capture_source_manager_v1 *manager;
 static struct ext_image_copy_capture_manager_v1 *manager2;
@@ -248,8 +238,6 @@ void godot::WindowPoller::set_monitor_index(int monitor_index) {
 
 int godot::WindowPoller::get_monitor_index() { return this->monitor_index; }
 
-void godot::WindowPoller::_physics_process(double delta) {}
-
 godot::WindowPoller::WindowPoller() {
 
   wl_display = wl_display_connect(NULL);
@@ -260,77 +248,65 @@ godot::WindowPoller::WindowPoller() {
   wl_display_dispatch(wl_display);
   wl_display_roundtrip(wl_display);
 
-  int sway_fd = ipc_open_socket(get_socketpath());
-
-  struct pollfd pollfds[] = {
-      [EVENT_LOOP_WAYLAND] =
-          {
-              .fd = wl_fd,
-              .events = POLLIN,
-          },
-      [EVENT_LOOP_SWAYIPC] =
-          {
-              .fd = sway_fd,
-              .events = POLLIN,
-          },
+  this->sway_fd = ipc_open_socket(get_socketpath());
+  this->pollfds[0] = {
+      .fd = wl_fd,
+      .events = POLLIN,
+  };
+  this->pollfds[1] = {
+      .fd = sway_fd,
+      .events = POLLIN,
   };
 
   uint32_t len = 0;
-  char *tree = ipc_single_command(sway_fd, IPC_GET_TREE, "", &len);
+  char *tree = ipc_single_command(this->sway_fd, IPC_GET_TREE, "", &len);
   auto thing = sway::parse_node(tree);
   print_node(thing);
-  free(tree, this);
+  ::free(tree);
   std::string command = "[\"window\"]";
   len = command.length();
   char *subscribe =
-      ipc_single_command(sway_fd, IPC_SUBSCRIBE, command.c_str(), &len);
+      ipc_single_command(this->sway_fd, IPC_SUBSCRIBE, command.c_str(), &len);
   printf("SUBSCRIBE: %s\n", subscribe);
-  free(subscribe, this);
-  int ret;
-  while ("true") {
-    ret = poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), -1);
+  ::free(subscribe);
+}
 
-    if (pollfds[EVENT_LOOP_WAYLAND].revents & POLLHUP) {
+void godot::WindowPoller::_process(double delta) {
+  int polled = 1;
+  int ret;
+  while (polled) {
+    polled = poll(this->pollfds,
+                  sizeof(this->pollfds) / sizeof(this->pollfds[0]), 0);
+
+    if (this->pollfds[EVENT_LOOP_WAYLAND].revents & POLLHUP) {
       printf("event-loop: disconnected from wayland\n");
       break;
     }
 
-    if (pollfds[EVENT_LOOP_SWAYIPC].revents & POLLHUP) {
+    if (this->pollfds[EVENT_LOOP_SWAYIPC].revents & POLLHUP) {
       printf("event-loop: disconnected from sway IPC\n");
       break;
     }
 
-    if (pollfds[EVENT_LOOP_WAYLAND].revents & POLLIN) {
+    if (this->pollfds[EVENT_LOOP_WAYLAND].revents & POLLIN) {
       ret = wl_display_dispatch(wl_display);
       if (ret < 0) {
         printf("wl_display_dispatch failed: %s\n", strerror(errno));
         break;
       }
     }
-    if (pollfds[EVENT_LOOP_SWAYIPC].revents & POLLIN) {
-      auto *resp = ipc_recv_response(sway_fd);
+    if (this->pollfds[EVENT_LOOP_SWAYIPC].revents & POLLIN) {
+      auto *resp = ipc_recv_response(this->sway_fd);
       auto change = sway::parse_change(resp->payload);
       std::cout << change.change << std::endl;
       print_node(change.container);
-      free(resp, this);
+      ::free(resp);
     }
     do {
       ret = wl_display_dispatch_pending(wl_display);
       wl_display_flush(wl_display);
     } while (ret > 0);
   }
-
-  // wl_display_roundtrip(wl_display);
-  // wl_display_flush(wl_display);
-  // char buf[512];
-  // ssize_t bytes;
-  // while(-1 != (bytes = read(fd, &buf, sizeof(buf)))) {
-  // 	if (bytes) {
-  // 		printf("got %ld bytes\n", bytes);
-  // 		wl_display_dispatch(wl_display);
-  // 	}
-  // }
-  printf("goodbye\n");
 }
 
 godot::WindowPoller::~WindowPoller() {}
